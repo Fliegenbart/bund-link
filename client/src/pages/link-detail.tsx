@@ -11,12 +11,14 @@ import type { Link } from "@shared/schema";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
 
 export default function LinkDetail() {
   const [, params] = useRoute("/links/:id");
   const linkId = params?.id || "";
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
 
   const { data: link, isLoading } = useQuery<Link>({
     queryKey: ["/api/links", linkId],
@@ -52,6 +54,34 @@ export default function LinkDetail() {
         description: "Der Link wurde erfolgreich gelöscht.",
       });
       setLocation("/dashboard");
+    },
+  });
+
+  const generateQRMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/links/${linkId}/generate-qr`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to generate QR code");
+      }
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    },
+    onSuccess: (url) => {
+      setQrCodeUrl(url);
+      toast({
+        title: "QR-Code generiert",
+        description: "Der QR-Code wurde erfolgreich erstellt.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Fehler",
+        description: "QR-Code konnte nicht generiert werden.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -227,10 +257,26 @@ export default function LinkDetail() {
               <CardTitle>Aktionen</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full" data-testid="button-qr">
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={() => generateQRMutation.mutate()}
+                disabled={generateQRMutation.isPending}
+                data-testid="button-qr"
+              >
                 <QrCode className="mr-2 h-4 w-4" />
                 QR-Code generieren
               </Button>
+              {qrCodeUrl && (
+                <div className="mt-4 flex justify-center rounded-md border p-4">
+                  <img
+                    src={qrCodeUrl}
+                    alt="QR Code"
+                    className="h-48 w-48"
+                    data-testid="img-qr-code"
+                  />
+                </div>
+              )}
               <Button
                 variant="outline"
                 className="w-full"
