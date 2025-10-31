@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import CreateLink from "@/pages/create";
+import LinkDetail from "@/pages/link-detail";
 import Analytics from "@/pages/analytics";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
@@ -32,6 +33,7 @@ function Router() {
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/create" component={CreateLink} />
+          <Route path="/links/:id" component={LinkDetail} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/reports" component={Reports} />
           <Route path="/settings" component={Settings} />
@@ -43,7 +45,7 @@ function Router() {
   );
 }
 
-function App() {
+function AuthenticatedApp() {
   const { isAuthenticated, isLoading } = useAuth();
   const style = {
     "--sidebar-width": "20rem",
@@ -51,30 +53,36 @@ function App() {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <TooltipProvider>
-          {!isLoading && isAuthenticated ? (
-            <SidebarProvider style={style as React.CSSProperties}>
-              <div className="flex h-screen w-full">
-                <AppSidebar />
-                <div className="flex flex-1 flex-col">
-                  <header className="flex items-center justify-between border-b p-2">
-                    <SidebarTrigger data-testid="button-sidebar-toggle" />
-                    <ThemeToggle />
-                  </header>
-                  <main className="flex flex-1 overflow-auto">
-                    <Router />
-                  </main>
-                </div>
+    <ThemeProvider>
+      <TooltipProvider>
+        {!isLoading && isAuthenticated ? (
+          <SidebarProvider style={style as React.CSSProperties}>
+            <div className="flex h-screen w-full">
+              <AppSidebar />
+              <div className="flex flex-1 flex-col">
+                <header className="flex items-center justify-between border-b p-2">
+                  <SidebarTrigger data-testid="button-sidebar-toggle" />
+                  <ThemeToggle />
+                </header>
+                <main className="flex flex-1 overflow-auto">
+                  <Router />
+                </main>
               </div>
-            </SidebarProvider>
-          ) : (
-            <Router />
-          )}
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
+            </div>
+          </SidebarProvider>
+        ) : (
+          <Router />
+        )}
+        <Toaster />
+      </TooltipProvider>
+    </ThemeProvider>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthenticatedApp />
     </QueryClientProvider>
   );
 }

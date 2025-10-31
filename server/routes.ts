@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertLinkSchema, insertReportSchema } from "@shared/schema";
+import { requireRole, canAccessLink } from "./middleware/authorization";
+import { insertLinkSchema, updateLinkSchema, insertReportSchema, insertRoutingRuleSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -20,8 +21,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Link routes
-  app.post("/api/links", isAuthenticated, async (req: any, res) => {
+  // Link routes (require at least 'local' role to create/manage links)
+  app.post("/api/links", isAuthenticated, requireRole("local", "state", "federal"), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const validatedData = insertLinkSchema.parse(req.body);
@@ -33,7 +34,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/links", isAuthenticated, async (req: any, res) => {
+  app.get("/api/links", isAuthenticated, requireRole("local", "state", "federal"), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const links = await storage.getLinks(userId);
@@ -44,7 +45,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/links/stats", isAuthenticated, async (req: any, res) => {
+  app.get("/api/links/:id", isAuthenticated, canAccessLink, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const link = await storage.getLink(id);
+      if (!link) {
+        return res.status(404).json({ message: "Link not found" });
+      }
+      res.json(link);
+    } catch (error) {
+      console.error("Error fetching link:", error);
+      res.status(500).json({ message: "Failed to fetch link" });
+    }
+  });
+
+  app.get("/api/links/stats", isAuthenticated, requireRole("local", "state", "federal"), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const stats = await storage.getLinkStats(userId);
@@ -78,7 +93,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Link not found" });
       }
 
-      // Track analytics (anonymized)
+      // Track analytics (fully anonymized, GDPR-compliant)
       const userAgent = req.headers["user-agent"] || "";
       const deviceType = userAgent.includes("Mobile") ? "mobile" : 
                         userAgent.includes("Tablet") ? "tablet" : "desktop";
@@ -90,7 +105,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         country: "DE",
         region: null,
         language: req.headers["accept-language"]?.split(",")[0].slice(0, 2) || "de",
-        referrer: req.headers.referer || null,
+        // Referrer intentionally omitted - contains potentially identifying information
+        referrer: null,
       });
 
       await storage.incrementClickCount(link.id);
@@ -102,7 +118,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/links/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/links/:id", isAuthenticated, canAccessLink, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = updateLinkSchema.parse(req.body);
+      const link = await storage.updateLink(id, validatedData);
+      res.json(link);
+    } catch (error: any) {
+      console.error("Error updating link:", error);
+      res.status(400).json({ message: error.message || "Failed to update link" });
+    }
+  });
+
+  app.delete("/api/links/:id", isAuthenticated, canAccessLink, async (req: any, res) => {
     try {
       const { id } = req.params;
       await storage.deleteLink(id);
@@ -113,8 +141,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Analytics routes
-  app.get("/api/analytics/overview", isAuthenticated, async (req, res) => {
+  // Routing rules (for smart routing)
+  app.post("/api/links/:linkId/routing-rules", isAuthenticated, canAccessLink, async (req: any, res) => {
+    try {
+      const { linkId } = req.params;
+      const validatedData = insertRoutingRuleSchema.parse({
+        ...req.body,
+        linkId,
+      });
+      const rule = await storage.createRoutingRule(validatedData);
+      res.json(rule);
+    } catch (error: any) {
+      console.error("Error creating routing rule:", error);
+      res.status(400).json({ message: error.message || "Failed to create routing rule" });
+    }
+  });
+
+  app.get("/api/links/:linkId/routing-rules", isAuthenticated, canAccessLink, async (req: any, res) => {
+    try {
+      const { linkId } = req.params;
+      const rules = await storage.getRoutingRulesByLink(linkId);
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching routing rules:", error);
+      res.status(500).json({ message: "Failed to fetch routing rules" });
+    }
+  });
+
+  // Analytics routes (require at least 'local' role)
+  app.get("/api/analytics/overview", isAuthenticated, requireRole("local", "state", "federal"), async (req, res) => {
     try {
       const analytics = await storage.getAnalyticsOverview();
       res.json(analytics);
@@ -124,7 +179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/:linkId", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/:linkId", isAuthenticated, canAccessLink, async (req, res) => {
     try {
       const { linkId } = req.params;
       const analytics = await storage.getAnalyticsByLink(linkId);
@@ -135,7 +190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Report routes
+  // Report routes (anyone can report, only state/federal can manage)
   app.post("/api/reports", async (req, res) => {
     try {
       const validatedData = insertReportSchema.parse(req.body);
@@ -147,7 +202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/reports", isAuthenticated, async (req, res) => {
+  app.get("/api/reports", isAuthenticated, requireRole("state", "federal"), async (req, res) => {
     try {
       const reports = await storage.getReports();
       res.json(reports);
@@ -157,7 +212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/reports/:id/status", isAuthenticated, async (req, res) => {
+  app.patch("/api/reports/:id/status", isAuthenticated, requireRole("state", "federal"), async (req, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   MoreVertical,
   Copy,
@@ -40,6 +40,7 @@ import { de } from "date-fns/locale";
 
 export default function Dashboard() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: links, isLoading } = useQuery<LinkType[]>({
@@ -263,6 +264,14 @@ export default function Dashboard() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="gap-2"
+                              onClick={() => setLocation(`/links/${link.id}`)}
+                              data-testid={`button-view-${link.id}`}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              Details anzeigen
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               className="gap-2"
                               data-testid={`button-qr-${link.id}`}

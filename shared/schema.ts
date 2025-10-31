@@ -68,12 +68,26 @@ export const linksRelations = relations(links, ({ one, many }) => ({
 
 export const insertLinkSchema = createInsertSchema(links).omit({
   id: true,
+  shortCode: true,
+  createdBy: true,
   createdAt: true,
   updatedAt: true,
   clickCount: true,
 });
 
+// Only allow updating safe fields
+export const updateLinkSchema = z.object({
+  destinationUrl: z.string().url().optional(),
+  customAlias: z.string().regex(/^[a-zA-Z0-9-_]*$/).optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  agency: z.string().optional(),
+  isActive: z.boolean().optional(),
+  expiresAt: z.string().datetime().optional().nullable(),
+});
+
 export type InsertLink = z.infer<typeof insertLinkSchema>;
+export type UpdateLink = z.infer<typeof updateLinkSchema>;
 export type Link = typeof links.$inferSelect;
 
 // Routing rules for smart routing (geographic, language, device, time-based)
