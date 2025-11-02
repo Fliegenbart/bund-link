@@ -90,6 +90,26 @@ export type InsertLink = z.infer<typeof insertLinkSchema>;
 export type UpdateLink = z.infer<typeof updateLinkSchema>;
 export type Link = typeof links.$inferSelect;
 
+// Bulk link creation schema
+export const bulkLinkSchema = z.object({
+  destinationUrl: z.string().url(),
+  customAlias: z.string().regex(/^[a-zA-Z0-9-_]*$/).optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  agency: z.string().optional(),
+  expiresAt: z.string().datetime().optional(),
+});
+
+export const bulkLinksSchema = z.array(bulkLinkSchema);
+export type BulkLink = z.infer<typeof bulkLinkSchema>;
+export type BulkLinkResult = {
+  row: number;
+  success: boolean;
+  shortCode?: string;
+  error?: string;
+  link?: Link;
+};
+
 // Routing rules for smart routing (geographic, language, device, time-based)
 export const routingRules = pgTable("routing_rules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

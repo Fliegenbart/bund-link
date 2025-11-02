@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { requireRole, canAccessLink } from "./middleware/authorization";
-import { insertLinkSchema, updateLinkSchema, insertReportSchema, insertRoutingRuleSchema } from "@shared/schema";
+import { insertLinkSchema, updateLinkSchema, insertReportSchema, insertRoutingRuleSchema, bulkLinksSchema, type BulkLinkResult } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -31,6 +31,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error creating link:", error);
       res.status(400).json({ message: error.message || "Failed to create link" });
+    }
+  });
+
+  app.post("/api/links/bulk", isAuthenticated, requireRole("local", "state", "federal"), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const links = bulkLinksSchema.parse(req.body);
+      
+      const results: BulkLinkResult[] = [];
+      for (let i = 0; i < links.length; i++) {
+        const linkData = links[i];
+        try {
+          const validatedData = insertLinkSchema.parse({
+            ...linkData,
+            isActive: true,
+          });
+          const link = await storage.createLink(validatedData, userId);
+          results.push({
+            row: i + 1,
+            success: true,
+            shortCode: link.shortCode,
+            link,
+          });
+        } catch (error: any) {
+          results.push({
+            row: i + 1,
+            success: false,
+            error: error.message || "Failed to create link",
+          });
+        }
+      }
+      
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error in bulk creation:", error);
+      res.status(400).json({ message: error.message || "Failed to process bulk creation" });
     }
   });
 

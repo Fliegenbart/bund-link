@@ -6,6 +6,7 @@ import {
   Shield,
   FileText,
   ChevronRight,
+  Upload,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -36,6 +37,11 @@ const menuItems = [
     title: "Links erstellen",
     url: "/create",
     icon: Link2,
+  },
+  {
+    title: "Massen-Upload",
+    url: "/bulk-create",
+    icon: Upload,
   },
   {
     title: "Analytics",

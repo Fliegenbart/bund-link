@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import CreateLink from "@/pages/create";
+import BulkCreate from "@/pages/bulk-create";
 import LinkDetail from "@/pages/link-detail";
 import Analytics from "@/pages/analytics";
 import Reports from "@/pages/reports";
@@ -33,6 +34,7 @@ function Router() {
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/create" component={CreateLink} />
+          <Route path="/bulk-create" component={BulkCreate} />
           <Route path="/links/:id" component={LinkDetail} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/reports" component={Reports} />
