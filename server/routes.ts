@@ -77,7 +77,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!link) {
         return res.status(404).json({ message: "Link not found" });
       }
-      res.json(link);
+
+      // Determine appropriate destination URL based on routing rules
+      const userAgent = req.headers["user-agent"] || "";
+      const deviceType = userAgent.includes("Mobile") ? "mobile" : 
+                        userAgent.includes("Tablet") ? "tablet" : "desktop";
+      
+      // Parse full language tag from Accept-Language (e.g., "de-DE" or "en-US")
+      // Format: "de-DE,de;q=0.9,en;q=0.8" → extract "de-DE"
+      const acceptLanguage = req.headers["accept-language"] || "de";
+      const language = acceptLanguage.split(",")[0].split(";")[0].trim();
+      
+      // Country detection: Use X-Country-Code header for testing, fallback to DE
+      // In production, replace with GeoIP service (e.g., MaxMind, ipapi.co)
+      const country = (req.headers["x-country-code"] as string) || "DE";
+
+      const destinationUrl = await storage.getDestinationUrl(link.id, {
+        country,
+        language,
+        deviceType,
+      });
+
+      res.json({ ...link, destinationUrl });
     } catch (error) {
       console.error("Error fetching link:", error);
       res.status(500).json({ message: "Failed to fetch link" });
@@ -122,7 +143,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const validatedData = updateLinkSchema.parse(req.body);
-      const link = await storage.updateLink(id, validatedData);
+      
+      // Convert expiresAt string to Date if present
+      const updates: any = { ...validatedData };
+      if (updates.expiresAt) {
+        updates.expiresAt = new Date(updates.expiresAt);
+      }
+      
+      const link = await storage.updateLink(id, updates);
       res.json(link);
     } catch (error: any) {
       console.error("Error updating link:", error);

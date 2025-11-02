@@ -42,6 +42,10 @@ export interface IStorage {
   // Routing rule operations
   createRoutingRule(rule: InsertRoutingRule): Promise<RoutingRule>;
   getRoutingRulesByLink(linkId: string): Promise<RoutingRule[]>;
+  getDestinationUrl(
+    linkId: string,
+    context: { country?: string; language?: string; deviceType?: string }
+  ): Promise<string>;
 
   // Analytics operations
   trackClick(analytics: InsertAnalytics): Promise<Analytics>;
@@ -168,6 +172,75 @@ export class DatabaseStorage implements IStorage {
       .from(routingRules)
       .where(eq(routingRules.linkId, linkId))
       .orderBy(desc(routingRules.priority));
+  }
+
+  async getDestinationUrl(
+    linkId: string,
+    context: { country?: string; language?: string; deviceType?: string }
+  ): Promise<string> {
+    const link = await db.select().from(links).where(eq(links.id, linkId)).limit(1);
+    if (!link || link.length === 0) {
+      throw new Error("Link not found");
+    }
+
+    const rules = await this.getRoutingRulesByLink(linkId);
+    
+    // Normalize context values
+    const normalizedContext = {
+      country: context.country?.toUpperCase(),
+      language: context.language?.toLowerCase(),
+      deviceType: context.deviceType?.toLowerCase(),
+    };
+    
+    for (const rule of rules) {
+      const condition = rule.condition as any;
+      let matches = false;
+
+      switch (rule.ruleType) {
+        case "geographic":
+          // Currently only supports country-level routing
+          // State/region routing requires GeoIP service with granular location data
+          if (condition.country && !condition.state && !condition.region) {
+            // Simple country match
+            matches = normalizedContext.country === condition.country.toUpperCase();
+          } else {
+            // Rules with state/region are not supported yet - skip them
+            matches = false;
+          }
+          break;
+        
+        case "language":
+          // Support language and locale conditions
+          if (condition.language) {
+            const conditionLang = condition.language.toLowerCase();
+            matches = normalizedContext.language === conditionLang || 
+                     (normalizedContext.language?.startsWith(conditionLang) ?? false);
+          }
+          if (!matches && condition.locale) {
+            matches = normalizedContext.language === condition.locale.toLowerCase();
+          }
+          break;
+        
+        case "device":
+          // Support deviceType and device conditions
+          if (condition.deviceType) {
+            matches = normalizedContext.deviceType === condition.deviceType.toLowerCase();
+          }
+          if (!matches && condition.device) {
+            matches = normalizedContext.deviceType === condition.device.toLowerCase();
+          }
+          break;
+        
+        default:
+          matches = false;
+      }
+
+      if (matches) {
+        return rule.targetUrl;
+      }
+    }
+
+    return link[0].destinationUrl;
   }
 
   // Analytics operations

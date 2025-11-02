@@ -95,10 +95,17 @@ Preferred communication style: Simple, everyday language.
 ### Key Features Implementation
 
 **Smart Routing**
-- Geographic routing based on country detection
+- Geographic routing based on country detection (currently country-level only)
+  - Uses X-Country-Code header for testing (fallback: DE)
+  - Production deployment requires GeoIP service integration (e.g., MaxMind, ipapi.co)
+  - State/region routing not yet supported (requires granular GeoIP data)
 - Language-based routing with fallback mechanisms
-- Device optimization (mobile app vs. web)
-- Priority-based rule evaluation
+  - Detects language from Accept-Language header
+  - Supports language codes (de, en, fr) and locales (de-DE, en-US)
+- Device optimization (mobile, tablet, desktop)
+  - User-Agent based detection
+  - Future: Deep link support for mobile apps
+- Priority-based rule evaluation with fallback to default destination
 
 **Link Preview System**
 - Countdown-based redirect (5 seconds default) for user awareness
