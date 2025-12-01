@@ -166,32 +166,38 @@ https://www.bundesregierung.de/beispiel2,beispiel2,Beispiel Link 2,Beschreibung 
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-4xl">
+    <div className="p-8 space-y-6 max-w-4xl mx-auto w-full">
       <div>
-        <h1 className="text-3xl font-bold">Massen-Link-Erstellung</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Massen-Link-Erstellung</h1>
         <p className="text-muted-foreground mt-2">
           Erstellen Sie mehrere verkürzte Links gleichzeitig mit CSV-Upload
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>1. Vorlage herunterladen</CardTitle>
+      <Card className="border-0 shadow-sm rounded-2xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold flex items-center gap-3">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">1</span>
+            Vorlage herunterladen
+          </CardTitle>
           <CardDescription>
             Laden Sie die CSV-Vorlage herunter und füllen Sie sie mit Ihren Link-Daten aus
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={downloadTemplate} variant="outline" data-testid="button-download-template">
+          <Button onClick={downloadTemplate} variant="outline" className="rounded-xl" data-testid="button-download-template">
             <Download className="mr-2 h-4 w-4" />
             CSV-Vorlage herunterladen
           </Button>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>2. CSV-Datei hochladen</CardTitle>
+      <Card className="border-0 shadow-sm rounded-2xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold flex items-center gap-3">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">2</span>
+            CSV-Datei hochladen
+          </CardTitle>
           <CardDescription>
             Laden Sie Ihre ausgefüllte CSV-Datei hoch
           </CardDescription>
@@ -201,12 +207,14 @@ https://www.bundesregierung.de/beispiel2,beispiel2,Beispiel Link 2,Beschreibung 
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            className={`border-2 border-dashed rounded-md p-8 text-center transition-colors ${
-              isDragging ? "border-primary bg-primary/5" : "border-border"
+            className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-200 ${
+              isDragging ? "border-primary bg-primary/5 scale-[1.01]" : "border-border/50 bg-muted/30"
             }`}
           >
-            <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-sm text-muted-foreground mb-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 mx-auto mb-4">
+              <Upload className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
               Ziehen Sie eine CSV-Datei hierher oder klicken Sie zum Hochladen
             </p>
             <input
@@ -220,6 +228,7 @@ https://www.bundesregierung.de/beispiel2,beispiel2,Beispiel Link 2,Beschreibung 
             <Button
               onClick={() => fileInputRef.current?.click()}
               variant="secondary"
+              className="rounded-xl"
               data-testid="button-select-file"
             >
               <FileText className="mr-2 h-4 w-4" />
@@ -228,8 +237,8 @@ https://www.bundesregierung.de/beispiel2,beispiel2,Beispiel Link 2,Beschreibung 
           </div>
 
           {csvData.length > 0 && (
-            <div className="mt-4 p-4 bg-muted rounded-md">
-              <p className="text-sm font-medium">
+            <div className="mt-4 p-4 bg-green-500/10 rounded-xl border border-green-500/20">
+              <p className="text-sm font-medium text-green-600 dark:text-green-400">
                 {csvData.length} Links zum Erstellen bereit
               </p>
             </div>
@@ -237,9 +246,12 @@ https://www.bundesregierung.de/beispiel2,beispiel2,Beispiel Link 2,Beschreibung 
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>3. Links erstellen</CardTitle>
+      <Card className="border-0 shadow-sm rounded-2xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold flex items-center gap-3">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">3</span>
+            Links erstellen
+          </CardTitle>
           <CardDescription>
             Starten Sie die Massenverarbeitung
           </CardDescription>
@@ -248,7 +260,7 @@ https://www.bundesregierung.de/beispiel2,beispiel2,Beispiel Link 2,Beschreibung 
           <Button
             onClick={handleCreateLinks}
             disabled={csvData.length === 0 || bulkCreateMutation.isPending}
-            className="w-full"
+            className="w-full rounded-xl h-12 shadow-sm"
             data-testid="button-create-bulk"
           >
             {bulkCreateMutation.isPending ? (
@@ -264,16 +276,16 @@ https://www.bundesregierung.de/beispiel2,beispiel2,Beispiel Link 2,Beschreibung 
       </Card>
 
       {results.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
+        <Card className="border-0 shadow-sm rounded-2xl">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <CardTitle>Ergebnisse</CardTitle>
+                <CardTitle className="text-lg font-semibold">Ergebnisse</CardTitle>
                 <CardDescription>
                   {results.filter(r => r.success).length} erfolgreich, {results.filter(r => !r.success).length} fehlgeschlagen
                 </CardDescription>
               </div>
-              <Button onClick={exportResults} variant="outline" data-testid="button-export-results">
+              <Button onClick={exportResults} variant="outline" className="rounded-xl" data-testid="button-export-results">
                 <Download className="mr-2 h-4 w-4" />
                 Exportieren
               </Button>
@@ -284,22 +296,26 @@ https://www.bundesregierung.de/beispiel2,beispiel2,Beispiel Link 2,Beschreibung 
               {results.map((result) => (
                 <div
                   key={result.row}
-                  className={`flex items-center justify-between p-3 rounded-md border ${
-                    result.success ? "border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800" : "border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800"
+                  className={`flex items-center justify-between p-4 rounded-xl border ${
+                    result.success ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"
                   }`}
                   data-testid={`result-row-${result.row}`}
                 >
                   <div className="flex items-center gap-3 flex-1">
                     {result.success ? (
-                      <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/10">
+                        <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      </div>
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10">
+                        <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      </div>
                     )}
                     <div className="flex-1">
                       <p className="text-sm font-medium">Zeile {result.row}</p>
                       {result.success && result.shortCode && (
                         <p className="text-xs text-muted-foreground">
-                          Code: {result.shortCode}
+                          Code: <code className="bg-muted px-1.5 py-0.5 rounded">{result.shortCode}</code>
                         </p>
                       )}
                       {!result.success && result.error && (

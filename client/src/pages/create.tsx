@@ -113,28 +113,29 @@ export default function CreateLink() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className="flex flex-1 flex-col gap-8 p-8 max-w-4xl mx-auto w-full">
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setLocation("/dashboard")}
+          className="rounded-xl"
           data-testid="button-back"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-3xl font-bold">Neuer Link erstellen</h1>
-          <p className="text-muted-foreground">Erstellen Sie einen verkürzten Link mit erweiterten Optionen</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Neuer Link erstellen</h1>
+          <p className="text-muted-foreground mt-1">Erstellen Sie einen verkürzten Link mit erweiterten Optionen</p>
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="w-full">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Grundlegende Informationen</CardTitle>
+            <Card className="border-0 shadow-sm rounded-2xl">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl font-semibold">Grundlegende Informationen</CardTitle>
                 <CardDescription>
                   Geben Sie die Ziel-URL und optionale Details ein
                 </CardDescription>
@@ -262,9 +263,9 @@ export default function CreateLink() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Erweiterte Optionen</CardTitle>
+            <Card className="border-0 shadow-sm rounded-2xl">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl font-semibold">Erweiterte Optionen</CardTitle>
                 <CardDescription>
                   Intelligente Weiterleitungen basierend auf Standort, Sprache und mehr
                 </CardDescription>
@@ -350,6 +351,7 @@ export default function CreateLink() {
                 type="button"
                 variant="outline"
                 onClick={() => setLocation("/dashboard")}
+                className="rounded-xl h-11 px-6"
                 data-testid="button-cancel"
               >
                 Abbrechen
@@ -358,7 +360,7 @@ export default function CreateLink() {
                 type="submit"
                 disabled={createMutation.isPending}
                 data-testid="button-submit"
-                className="flex-1"
+                className="flex-1 rounded-xl h-11 shadow-sm"
               >
                 {createMutation.isPending ? "Wird erstellt..." : "Link erstellen"}
               </Button>

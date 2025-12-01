@@ -59,14 +59,14 @@ function AuthenticatedApp() {
       <TooltipProvider>
         {!isLoading && isAuthenticated ? (
           <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
+            <div className="flex h-screen w-full bg-muted/30">
               <AppSidebar />
               <div className="flex flex-1 flex-col">
-                <header className="flex items-center justify-between border-b p-2">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
+                <header className="flex items-center justify-between h-14 px-4 bg-background/80 backdrop-blur-xl border-b border-border/50 sticky top-0 z-10">
+                  <SidebarTrigger data-testid="button-sidebar-toggle" className="rounded-lg" />
                   <ThemeToggle />
                 </header>
-                <main className="flex flex-1 overflow-auto">
+                <main className="flex flex-1 overflow-auto bg-background">
                   <Router />
                 </main>
               </div>

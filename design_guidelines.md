@@ -2,215 +2,246 @@
 
 ## Design Approach
 
-**System Selection**: Material Design 3 with government customization
-- **Rationale**: Government services require clarity, accessibility, and trust. Material Design provides robust accessibility patterns, clear visual hierarchy, and established interaction models that work across diverse user groups.
-- **Adaptation**: Incorporate trust indicators (verification badges, official seals), enhanced security visual language, and conservative color application suited for public sector credibility.
+**System Selection**: Apple-Inspired Minimalist Design for Government Services
+- **Rationale**: Apple's design language is renowned for its clarity, elegance, and user-focus. For government services, this translates to trustworthy, professional interfaces that feel modern yet accessible.
+- **Adaptation**: Clean typography, generous whitespace, subtle shadows, refined color palette, and smooth interactions that convey professionalism and reliability.
+
+## Core Design Principles
+
+1. **Clarity**: Every element serves a purpose. Remove visual clutter.
+2. **Deference**: The interface recedes to let content shine.
+3. **Depth**: Subtle shadows and layers create visual hierarchy.
+4. **Consistency**: Unified component styles across all pages.
+5. **Accessibility**: BITV 2.0 compliant with clear focus states.
 
 ## Typography
 
 **Font Families**:
-- Primary: Inter (via Google Fonts) - exceptional legibility, professional, extensive language support including German characters
-- Monospace: JetBrains Mono - for short codes, API keys, technical data
+- Primary: -apple-system, BlinkMacSystemFont, SF Pro Display (system fonts for native feel)
+- Fallback: Inter - exceptional legibility, professional, German character support
+- Monospace: SF Mono, JetBrains Mono - for short codes, API keys, technical data
 
-**Type Scale**:
-- H1 (Hero/Page Titles): 48px / font-bold / leading-tight
-- H2 (Section Headers): 36px / font-semibold / leading-tight
-- H3 (Card/Component Titles): 24px / font-semibold / leading-snug
-- H4 (Subsections): 20px / font-medium / leading-snug
-- Body Large: 18px / font-normal / leading-relaxed (for critical instructions)
-- Body: 16px / font-normal / leading-relaxed (default text)
-- Body Small: 14px / font-normal / leading-relaxed (metadata, captions)
-- Code/Short URLs: 16px / font-mono / tracking-wide
+**Type Scale with Apple-style tracking**:
+- H1 (Page Titles): 36px / font-semibold / tracking-tight (-0.025em)
+- H2 (Section Headers): 30px / font-semibold / tracking-tight (-0.02em)
+- H3 (Card Titles): 24px / font-semibold / tracking-tight
+- H4 (Subsections): 20px / font-medium
+- Body Large: 18px / font-normal / leading-relaxed
+- Body: 16px / font-normal / leading-relaxed
+- Body Small: 14px / font-normal / leading-relaxed
+- Caption: 12px / font-normal / text-muted-foreground
+
+## Color System
+
+**Light Mode**:
+- Background: Pure white (#FFFFFF) - 0 0% 100%
+- Foreground: Near black (#1C1C1C) - 0 0% 11%
+- Card: White (#FFFFFF) with subtle shadow
+- Muted backgrounds: Very light gray (#F5F5F5) - 0 0% 96%
+- Primary: Apple Blue (#007AFF) - 211 100% 50%
+- Success: Green (#34C759) - 142 70% 45%
+- Destructive: Red (#FF3B30) - 0 80% 60%
+
+**Dark Mode**:
+- Background: True black (#000000) - 0 0% 0%
+- Foreground: Off-white (#FAFAFA) - 0 0% 98%
+- Card: Dark gray (#121212) - 0 0% 7%
+- Muted backgrounds: Charcoal (#1C1C1E) - 0 0% 12%
+- Primary: Lighter Blue (#0A84FF) - 211 100% 55%
 
 ## Layout System
 
-**Spacing Primitives**: Tailwind units of 2, 4, 6, 8, 12, 16, 20
-- Micro spacing (buttons, form fields): p-2, p-4
-- Component spacing: p-6, p-8, gap-6
-- Section spacing: py-12, py-16, py-20
-- Container max-widths: max-w-7xl for dashboards, max-w-4xl for forms, max-w-prose for text content
+**Spacing Scale**:
+- 4px (p-1) - Micro spacing
+- 8px (p-2) - Tight spacing
+- 16px (p-4) - Standard spacing
+- 24px (p-6) - Component padding
+- 32px (p-8) - Section spacing
+- 48px (p-12) - Large section gaps
+
+**Container Widths**:
+- max-w-7xl: Main dashboard layouts
+- max-w-4xl: Forms and create pages
+- max-w-3xl: Content-focused pages
+- max-w-2xl: Modal dialogs
 
 **Grid System**:
-- Admin Dashboard: 12-column grid with sidebar navigation (250px fixed width)
-- Forms/Create Link: Single column centered layouts with max-w-2xl
-- Analytics: 3-4 column responsive grids for metric cards
-- Link Preview Pages: Centered single column max-w-3xl
+- Sidebar: 20rem (320px) fixed width
+- Main content: Flexible with max-width constraints
+- Card grids: 4-column on desktop, 2 on tablet, 1 on mobile
 
 ## Component Library
 
-### Navigation & Structure
+### Cards
 
-**Admin Sidebar Navigation**:
-- Fixed left sidebar with hierarchical menu structure
-- Top section: Logo + user profile with role badge (Federal/State/Local)
-- Menu items with icons (dashboard, create link, analytics, settings)
-- Clear active state with subtle left border accent
-- Collapsible for mobile with hamburger menu
+**Apple-Style Cards**:
+- Background: `bg-card` (white in light, dark gray in dark)
+- Border: None (`border-0`)
+- Shadow: Subtle (`shadow-sm`)
+- Border radius: Extra large (`rounded-2xl`)
+- Padding: Generous (`p-6`)
+- Hover: Slight lift with shadow increase
 
-**Citizen-Facing Header**:
-- Centered horizontal layout with official government logo
-- Clear "Vertrauenswürdiger Bundeslink" (Trusted Federal Link) badge
-- Minimal navigation - focus on trust and destination clarity
+```jsx
+<Card className="border-0 shadow-sm rounded-2xl">
+```
 
-### Core Components
+### Buttons
 
-**Link Creation Form**:
-- Large, clear input fields with helper text
-- Real-time URL validation with inline feedback
-- Custom alias field with availability checker
-- Expiration date picker with calendar interface
-- Advanced options accordion (geographic routing, language detection)
-- Prominent "Link erstellen" (Create Link) primary button
+**Primary Button**:
+- Background: Primary blue with gradient feel
+- Border radius: Large (`rounded-xl`)
+- Height: 44px minimum (`h-11`)
+- Shadow: Subtle glow (`shadow-sm shadow-primary/25`)
+- Active: Scale down slightly
 
-**Link Cards (Dashboard)**:
-- Card-based layout with clear visual hierarchy
-- Top: Short URL in monospace with one-click copy button
-- Middle: Destination URL (truncated) with expand icon
-- Bottom row: Creation date, click count, status badge (active/expired)
-- Action menu (edit, QR code, analytics, delete) on right
-- Verification badge showing agency that created it
+**Secondary/Outline Button**:
+- Border: Subtle (`border-border/50`)
+- Background: Transparent, muted on hover
+- Same border radius and height as primary
 
-**Link Preview Page** (Citizen-facing):
-- Large verification badge at top (official seal graphic)
-- Clear headline: "Sie werden weitergeleitet zu:" (You will be redirected to:)
-- Destination URL displayed prominently in bordered container
-- Agency information card with logo and name
-- Trust indicators: SSL badge, creation date, last verified date
-- Two action buttons: "Fortfahren" (Continue - primary) and "Abbrechen" (Cancel - secondary)
-- Link to report suspicious activity at bottom
+```jsx
+<Button className="rounded-xl h-11 px-5 shadow-sm">
+```
 
-**QR Code Display**:
-- Large, high-contrast QR code centered
-- Download options below (PNG, SVG, PDF formats as buttons)
-- Size selector (small, medium, large) with live preview
-- Embedded accessibility info indicator
-- Print-optimized layout option
-
-**Analytics Dashboard Cards**:
-- Metric cards in 4-column grid: Total Clicks, Active Links, Click Rate, Geographic Distribution
-- Large numbers (32px bold) with trend indicators (↑ 12%)
-- Time period selector (24h, 7d, 30d, all time) as pill buttons
-- Charts: Line graph for clicks over time, bar chart for geographic distribution, pie chart for device types
-- Privacy notice: "Anonymisierte Daten gemäß GDPR" (Anonymized data per GDPR)
-
-**Bulk Link Generator**:
-- CSV upload zone with drag-and-drop
-- Template download link
-- Progress bar during generation
-- Results table with success/error status per row
-- Export generated links as CSV
-
-### Forms & Inputs
+### Inputs
 
 **Text Inputs**:
-- Large click targets (min-height: 44px for accessibility)
-- Clear labels positioned above inputs
-- Placeholder text in lighter shade for examples
-- Border emphasis on focus with smooth transition
-- Error states with red border and error message below
-- Success states with green checkmark icon
+- Background: Muted (`bg-muted/50`)
+- Border: None when unfocused
+- Border radius: Large (`rounded-xl`)
+- Focus: White background with ring (`focus:bg-background focus:ring-2 focus:ring-primary/20`)
+- Height: 44px minimum (`h-11`)
 
-**Buttons**:
-- Primary: Solid fill, medium font-weight, px-6 py-3, rounded-lg
-- Secondary: Outlined with border, same padding
-- Text/Ghost: No border, subtle hover background
-- Icon buttons: Square 44px minimum, centered icon
-- Loading states with spinner icon
-- Disabled state with reduced opacity
+### Navigation
 
-**Date/Time Pickers**:
-- Calendar popup with clear month/year navigation
-- Today button for quick selection
-- Selected date highlighted
-- Time selector for expiration with hour:minute format
+**Sidebar**:
+- Background: Slightly off-white/dark (`bg-sidebar`)
+- Border: None (uses shadow separation)
+- Menu items: Rounded with subtle active state
+- Active item: Primary color tint background (`bg-primary/10 text-primary`)
+- Icons: 20px with color matching text
 
-### Data Display
+**Header Bar**:
+- Height: 56px (`h-14`)
+- Background: Semi-transparent with blur (`bg-background/80 backdrop-blur-xl`)
+- Border: Very subtle bottom border (`border-b border-border/50`)
+- Sticky positioning
 
-**Tables** (Link Management):
-- Striped rows for readability
-- Sticky header on scroll
-- Sortable columns with arrow indicators
-- Inline actions (edit, delete) with icon buttons
-- Pagination at bottom with page number display
-- Empty state with illustration and "Create your first link" CTA
+### Status Indicators
 
-**Status Badges**:
-- Pill-shaped with subtle background
-- Active (green), Expired (gray), Scheduled (blue), Reported (red)
-- Icon prefix for colorblind accessibility
+**Badges**:
+- Pill-shaped (`rounded-full`)
+- Subtle background tints (green/10, red/10, blue/10)
+- Matching text color (green-600, red-600)
+- Small icon prefix for accessibility
 
-**Copy-to-Clipboard Elements**:
-- Monospace display of URL
-- Copy icon button on right
-- Success feedback (checkmark + "Kopiert!" tooltip) on click
+**Success State**:
+- Background: `bg-green-500/10`
+- Text: `text-green-600 dark:text-green-400`
+- Icon: CheckCircle
 
-### Accessibility Components
+**Error State**:
+- Background: `bg-red-500/10`
+- Text: `text-red-600 dark:text-red-400`
+- Icon: XCircle
 
-**Keyboard Navigation Indicators**:
-- Visible focus rings with 2px offset
-- Skip to main content link at top
-- Tab order follows logical flow
-- Focus trap in modals
+### Icons
 
-**Screen Reader Elements**:
-- ARIA labels for icon-only buttons
-- Live regions for dynamic content updates
-- Descriptive alt text for verification badges
-- Form field associations with proper labeling
+**Icon Style**:
+- Source: Lucide React icons
+- Sizes: 16px (small), 20px (default), 24px (large)
+- Stroke width: Default (2px)
+- Color: Match surrounding text or use muted-foreground
 
-**High Contrast Mode Support**:
-- Border outlines maintained in high contrast
-- Text remains readable
-- Focus indicators enhanced
-- Icons supplemented with text labels
+**Icon Containers**:
+- Circular or rounded square backgrounds
+- Subtle color tints (`bg-primary/10`, `bg-green-500/10`)
+- Size: 32-48px depending on context
 
-### Trust & Security Elements
+## Shadows
 
-**Verification Badges**:
-- Official government seal icon (stylized)
-- "Verifiziert" (Verified) text with checkmark
-- Hover tooltip showing issuing agency
-- Positioned prominently on link preview pages
+**Shadow Scale** (Apple-style soft shadows):
+```css
+--shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+--shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.04);
+--shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.04);
+--shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+```
 
-**Security Indicators**:
-- SSL lock icon with "Sichere Verbindung" (Secure Connection)
-- BSI certification badge in footer
-- Last security audit date display
-- Privacy policy link always accessible
+## Animations & Transitions
 
-## Images
+**Timing**:
+- Fast: 150ms (hover states, small interactions)
+- Medium: 200ms (button presses, reveals)
+- Standard: 300ms (modal opens, page transitions)
 
-**Logo/Brand Assets**:
-- German government logo (stylized coat of arms) in header - use as SVG for crisp rendering at all sizes
-- Position: Top left of admin sidebar, centered on citizen-facing pages
-- Size: 40px height in admin, 60px on landing pages
+**Easing**: `ease` or `ease-out` for natural feel
 
-**Verification Badge Graphics**:
-- Official seal/emblem design for trust indicators
-- Use as inline SVG with customizable colors
-- Positioned next to agency names and on preview pages
+**Hover Effects**:
+- Cards: Subtle shadow increase, slight Y translation (`hover:shadow-md translateY(-1px)`)
+- Buttons: Built-in elevation system
+- Links: Opacity change or underline reveal
 
-**Empty State Illustrations**:
-- Minimal line-art illustrations for "No links created yet" states
-- Dashboard empty state: Illustration of link chain or QR code
-- Size: 200px x 200px, centered above empty state text
+**Active/Press Effects**:
+- Buttons: Scale down (`transform: scale(0.98)`)
+- Cards: Very subtle scale if clickable
 
-**Error/Success Graphics**:
-- Success checkmark: Circular green icon for confirmations
-- Error alert: Triangle with exclamation for warnings
-- 48px icons centered in modal dialogs
+## Special Effects
 
-**No Hero Image**: This is a utility-focused government service. Hero images would distract from core functionality. Landing pages use large typography, verification badges, and clear value propositions instead of imagery.
+**Glass Morphism** (use sparingly):
+```css
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+}
+```
 
-## Animations
+**Gradients**:
+- Primary button glow: `bg-gradient-to-br from-primary to-primary/80`
+- CTA sections: `bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5`
+- Logo container: Subtle gradient with shadow
 
-**Minimal, Purposeful Motion**:
-- Page transitions: None - instant loads for clarity
-- Button interactions: Subtle scale on press (0.98x)
-- Loading states: Simple spinner rotation
-- Form validation: Smooth border color transition (200ms)
-- Dropdown menus: Fade-in with slight downward motion (150ms)
-- Tooltips: Fade-in only (100ms)
-- Success/Error messages: Slide-in from top (300ms ease-out)
+## Accessibility
 
-**Explicitly Avoid**: Parallax scrolling, decorative animations, carousel auto-play, elaborate page transitions
+**Focus States**:
+- Ring style: `focus:ring-2 focus:ring-primary/20`
+- Visible on all interactive elements
+- High contrast in both light and dark modes
+
+**Color Contrast**:
+- All text meets WCAG AA standards
+- Icons paired with text labels where needed
+- Status colors include icon indicators for colorblind users
+
+**Touch Targets**:
+- Minimum 44x44px for all interactive elements
+- Generous padding on buttons and links
+
+## Page-Specific Guidelines
+
+### Dashboard
+- Stats cards in 4-column grid with colored icon containers
+- Links table with clean rows, minimal borders
+- Search input with icon prefix, rounded style
+- Prominent "Create Link" button in header
+
+### Create Link
+- Single column form layout
+- Cards for grouped form sections
+- Large, clear labels
+- Accordion for advanced options
+- Sticky action buttons at bottom
+
+### Landing Page
+- Full-width sections with generous vertical padding
+- Large, impactful headline with gradient text
+- Feature cards in 3-column grid
+- CTA section with subtle gradient background
+- Minimal, clean footer
+
+### Bulk Upload
+- Step-by-step card layout with numbered indicators
+- Drag-and-drop zone with dashed border
+- Progress indicators during processing
+- Results display with success/error states
