@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output (will be created in Docker)
+dist/
+
+# Development files
+.git/
+.gitignore
+.vscode/
+.replit
+*.md
+!DEPLOYMENT.md
+
+# Environment files (use docker-compose env)
+.env
+.env.*
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+*.swp
+*.swo
+.idea/
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__/
+coverage/
+
+# Local development
+.local/
+attached_assets/

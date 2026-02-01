@@ -131,7 +131,7 @@ export default function Preview() {
       <main className="flex flex-1 items-center justify-center p-4">
         <div className="w-full max-w-2xl space-y-6">
           <div className="text-center">
-            <VerificationBadge agency={link.agency} size="lg" className="mb-4" />
+            <VerificationBadge agency={link.agency ?? undefined} size="lg" className="mb-4" />
             <h1 className="mb-2 text-3xl font-bold">Sie werden weitergeleitet zu:</h1>
             <p className="text-muted-foreground">
               Überprüfen Sie die Ziel-URL, bevor Sie fortfahren
@@ -225,7 +225,7 @@ export default function Preview() {
             </Button>
             <Button
               onClick={handleContinue}
-              disabled={isExpired}
+              disabled={!!isExpired}
               className="flex-1 gap-2"
               data-testid="button-continue"
             >

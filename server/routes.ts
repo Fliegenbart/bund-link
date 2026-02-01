@@ -1,13 +1,64 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { requireRole, canAccessLink } from "./middleware/authorization";
+import { auditMiddleware } from "./middleware/audit";
+import { registerGdprRoutes } from "./routes/gdpr";
+import { registerQrCodeRoutes } from "./routes/qrcode";
+import { registerAIRoutes } from "./routes/ai";
+import { initGeoIP, getCountryFromIP, getClientIP } from "./lib/geoip";
+import { initAI } from "./lib/ai";
 import { insertLinkSchema, updateLinkSchema, insertReportSchema, insertRoutingRuleSchema, bulkLinksSchema, type BulkLinkResult } from "@shared/schema";
 
+// Stricter rate limits for sensitive endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts
+  message: { message: "Too many authentication attempts, please try again later." },
+});
+
+const createLinkLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 links per minute
+  message: { message: "Too many links created, please slow down." },
+});
+
+const trackingLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 tracking calls per minute per IP
+  message: { message: "Too many tracking requests." },
+});
+
+const reportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 reports per hour
+  message: { message: "Too many reports submitted, please try again later." },
+});
+
+// Input validation schemas for public endpoints
+const shortCodeSchema = z.string().regex(/^[a-zA-Z0-9_-]{3,50}$/, "Invalid short code format");
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize GeoIP database (non-blocking, falls back gracefully)
+  await initGeoIP();
+
+  // Initialize AI (Ollama) - non-blocking, falls back gracefully
+  await initAI();
+
   // Auth middleware
   await setupAuth(app);
+
+  // GDPR compliance routes
+  registerGdprRoutes(app);
+
+  // QR Code generation routes
+  registerQrCodeRoutes(app);
+
+  // AI-powered features routes
+  registerAIRoutes(app);
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
@@ -22,7 +73,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Link routes (require at least 'local' role to create/manage links)
-  app.post("/api/links", isAuthenticated, requireRole("local", "state", "federal"), async (req: any, res) => {
+  app.post("/api/links", createLinkLimiter, isAuthenticated, requireRole("local", "state", "federal"), auditMiddleware.createLink, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const validatedData = insertLinkSchema.parse(req.body);
@@ -34,7 +85,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/links/bulk", isAuthenticated, requireRole("local", "state", "federal"), async (req: any, res) => {
+  app.post("/api/links/bulk", createLinkLimiter, isAuthenticated, requireRole("local", "state", "federal"), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const links = bulkLinksSchema.parse(req.body);
@@ -108,7 +159,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/links/preview/:shortCode", async (req, res) => {
     try {
-      const { shortCode } = req.params;
+      // Validate shortCode format to prevent injection
+      const shortCode = shortCodeSchema.parse(req.params.shortCode);
       const link = await storage.getLinkByShortCode(shortCode);
       if (!link) {
         return res.status(404).json({ message: "Link not found" });
@@ -124,9 +176,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const acceptLanguage = req.headers["accept-language"] || "de";
       const language = acceptLanguage.split(",")[0].split(";")[0].trim();
       
-      // Country detection: Use X-Country-Code header for testing, fallback to DE
-      // In production, replace with GeoIP service (e.g., MaxMind, ipapi.co)
-      const country = (req.headers["x-country-code"] as string) || "DE";
+      // Country detection: Use X-Country-Code header for testing, otherwise use GeoIP
+      const testCountry = req.headers["x-country-code"] as string;
+      const country = testCountry || getCountryFromIP(getClientIP(req));
 
       const destinationUrl = await storage.getDestinationUrl(link.id, {
         country,
@@ -141,9 +193,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/links/:shortCode/track", async (req, res) => {
+  app.post("/api/links/:shortCode/track", trackingLimiter, async (req, res) => {
     try {
-      const { shortCode } = req.params;
+      // Validate shortCode format
+      const shortCode = shortCodeSchema.parse(req.params.shortCode);
       const link = await storage.getLinkByShortCode(shortCode);
       
       if (!link) {
@@ -158,9 +211,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.trackClick({
         linkId: link.id,
         deviceType,
-        // In production, would use GeoIP service for country/region
-        country: "DE",
-        region: null,
+        // Use GeoIP for country detection (GDPR-compliant: only country, no IP stored)
+        country: getCountryFromIP(getClientIP(req)),
+        region: null, // Would require GeoLite2-City database
         language: req.headers["accept-language"]?.split(",")[0].slice(0, 2) || "de",
         // Referrer intentionally omitted - contains potentially identifying information
         referrer: null,
@@ -175,7 +228,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/links/:id", isAuthenticated, canAccessLink, async (req: any, res) => {
+  app.patch("/api/links/:id", isAuthenticated, canAccessLink, auditMiddleware.updateLink, async (req: any, res) => {
     try {
       const { id } = req.params;
       const validatedData = updateLinkSchema.parse(req.body);
@@ -194,7 +247,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/links/:id", isAuthenticated, canAccessLink, async (req: any, res) => {
+  app.delete("/api/links/:id", isAuthenticated, canAccessLink, auditMiddleware.deleteLink, async (req: any, res) => {
     try {
       const { id } = req.params;
       await storage.deleteLink(id);
@@ -255,7 +308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Report routes (anyone can report, only state/federal can manage)
-  app.post("/api/reports", async (req, res) => {
+  app.post("/api/reports", reportLimiter, async (req, res) => {
     try {
       const validatedData = insertReportSchema.parse(req.body);
       const report = await storage.createReport(validatedData);
@@ -276,7 +329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/reports/:id/status", isAuthenticated, requireRole("state", "federal"), async (req, res) => {
+  app.patch("/api/reports/:id/status", isAuthenticated, requireRole("state", "federal"), auditMiddleware.updateReportStatus, async (req, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -285,6 +338,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating report:", error);
       res.status(500).json({ message: "Failed to update report" });
+    }
+  });
+
+  // Health check endpoint (for Docker, Kubernetes, load balancers)
+  app.get("/api/health", async (_req, res) => {
+    try {
+      // Basic health check - could add DB ping for thorough check
+      res.json({
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || "1.0.0",
+      });
+    } catch (error) {
+      res.status(503).json({
+        status: "unhealthy",
+        error: "Service unavailable",
+      });
     }
   });
 

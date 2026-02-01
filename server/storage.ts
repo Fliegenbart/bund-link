@@ -4,6 +4,7 @@ import {
   routingRules,
   analytics,
   reports,
+  auditLogs,
   type User,
   type UpsertUser,
   type Link,
@@ -16,7 +17,7 @@ import {
   type InsertReport,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, count, sql } from "drizzle-orm";
+import { eq, desc, and, count, sql, lt } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 export interface IStorage {
@@ -61,6 +62,16 @@ export interface IStorage {
   createReport(report: InsertReport): Promise<Report>;
   getReports(): Promise<Report[]>;
   updateReportStatus(id: string, status: "pending" | "reviewed" | "resolved"): Promise<Report>;
+
+  // GDPR operations
+  exportUserData(userId: string): Promise<{
+    user: User | undefined;
+    links: Link[];
+    analytics: Analytics[];
+    auditLogs: any[];
+  }>;
+  deleteUserData(userId: string): Promise<void>;
+  cleanupOldAnalytics(retentionDays: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -351,6 +362,77 @@ export class DatabaseStorage implements IStorage {
       .where(eq(reports.id, id))
       .returning();
     return report;
+  }
+
+  // GDPR operations
+  async exportUserData(userId: string): Promise<{
+    user: User | undefined;
+    links: Link[];
+    analytics: Analytics[];
+    auditLogs: any[];
+  }> {
+    const user = await this.getUser(userId);
+    const userLinks = await this.getLinks(userId);
+
+    // Get analytics for user's links
+    const linkIds = userLinks.map(l => l.id);
+    let userAnalytics: Analytics[] = [];
+    for (const linkId of linkIds) {
+      const linkAnalytics = await this.getAnalyticsByLink(linkId);
+      userAnalytics = [...userAnalytics, ...linkAnalytics];
+    }
+
+    // Get user's audit logs
+    const userAuditLogs = await db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.userId, userId))
+      .orderBy(desc(auditLogs.createdAt));
+
+    return {
+      user,
+      links: userLinks,
+      analytics: userAnalytics,
+      auditLogs: userAuditLogs,
+    };
+  }
+
+  async deleteUserData(userId: string): Promise<void> {
+    // Delete in order to respect foreign key constraints
+    // 1. Get all user's links
+    const userLinks = await this.getLinks(userId);
+    const linkIds = userLinks.map(l => l.id);
+
+    // 2. Delete analytics for user's links (cascade should handle this, but be explicit)
+    for (const linkId of linkIds) {
+      await db.delete(analytics).where(eq(analytics.linkId, linkId));
+    }
+
+    // 3. Delete routing rules for user's links (cascade should handle this)
+    for (const linkId of linkIds) {
+      await db.delete(routingRules).where(eq(routingRules.linkId, linkId));
+    }
+
+    // 4. Delete user's links
+    await db.delete(links).where(eq(links.createdBy, userId));
+
+    // 5. Delete user's audit logs
+    await db.delete(auditLogs).where(eq(auditLogs.userId, userId));
+
+    // 6. Delete user account
+    await db.delete(users).where(eq(users.id, userId));
+  }
+
+  async cleanupOldAnalytics(retentionDays: number = 90): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+    const result = await db
+      .delete(analytics)
+      .where(lt(analytics.clickedAt, cutoffDate))
+      .returning();
+
+    return result.length;
   }
 }
 

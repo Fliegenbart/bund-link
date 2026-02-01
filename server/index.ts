@@ -1,20 +1,55 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { scheduleRetentionCleanup } from "./jobs/retention";
 
 const app = express();
+
+// Security Headers (Helmet.js)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Needed for Vite dev
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "ws:", "wss:"], // WebSocket for Vite HMR
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Allow embedding for preview
+}));
+
+// Global Rate Limiting (100 requests per 15 minutes per IP)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." },
+  skip: (req) => !req.path.startsWith("/api"), // Only limit API routes
+});
+
+app.use(globalLimiter);
+
+// Trust proxy for correct IP detection behind reverse proxy
+app.set("trust proxy", 1);
 
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown
   }
 }
+// Body parsing with size limits (prevent DoS)
 app.use(express.json({
+  limit: "10kb",
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "10kb" }));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -77,5 +112,10 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+
+    // Start GDPR retention cleanup job (runs daily)
+    if (process.env.NODE_ENV === "production") {
+      scheduleRetentionCleanup();
+    }
   });
 })();
