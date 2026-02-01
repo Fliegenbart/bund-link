@@ -5,6 +5,8 @@ import {
   analytics,
   reports,
   auditLogs,
+  tenants,
+  customDomains,
   type User,
   type UpsertUser,
   type Link,
@@ -15,10 +17,18 @@ import {
   type InsertAnalytics,
   type Report,
   type InsertReport,
+  type Tenant,
+  type InsertTenant,
+  type UpdateTenant,
+  type CustomDomain,
+  type InsertCustomDomain,
+  type PrivacySettings,
+  DEFAULT_PRIVACY_SETTINGS,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, count, sql, lt } from "drizzle-orm";
+import { eq, desc, and, sql, lt, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
+import { prepareAnalyticsData } from "./lib/privacy";
 
 export interface IStorage {
   // User operations (required for Replit Auth)
@@ -72,6 +82,27 @@ export interface IStorage {
   }>;
   deleteUserData(userId: string): Promise<void>;
   cleanupOldAnalytics(retentionDays: number): Promise<number>;
+
+  // Tenant operations
+  createTenant(tenant: InsertTenant): Promise<Tenant>;
+  getTenant(id: string): Promise<Tenant | undefined>;
+  getTenantBySlug(slug: string): Promise<Tenant | undefined>;
+  getTenants(): Promise<Tenant[]>;
+  updateTenant(id: string, updates: UpdateTenant): Promise<Tenant>;
+  deleteTenant(id: string): Promise<void>;
+
+  // Custom domain operations
+  createCustomDomain(domain: InsertCustomDomain): Promise<CustomDomain>;
+  getCustomDomain(domain: string): Promise<CustomDomain | undefined>;
+  getCustomDomainsByTenant(tenantId: string): Promise<CustomDomain[]>;
+  verifyCustomDomain(id: string): Promise<CustomDomain>;
+  deleteCustomDomain(id: string): Promise<void>;
+
+  // Tenant-scoped operations
+  getLinksByTenant(tenantId: string): Promise<Link[]>;
+  getAnalyticsByTenant(tenantId: string): Promise<Analytics[]>;
+  cleanupTenantAnalytics(tenantId: string, retentionDays: number): Promise<number>;
+  cleanupTenantAuditLogs(tenantId: string, retentionDays: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -433,6 +464,252 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return result.length;
+  }
+
+  // =============================================
+  // TENANT OPERATIONS
+  // =============================================
+
+  async createTenant(tenantData: InsertTenant): Promise<Tenant> {
+    const [tenant] = await db
+      .insert(tenants)
+      .values({
+        ...tenantData,
+        privacySettings: tenantData.privacySettings || DEFAULT_PRIVACY_SETTINGS,
+      })
+      .returning();
+    return tenant;
+  }
+
+  async getTenant(id: string): Promise<Tenant | undefined> {
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, id));
+    return tenant;
+  }
+
+  async getTenantBySlug(slug: string): Promise<Tenant | undefined> {
+    const [tenant] = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.slug, slug.toLowerCase()));
+    return tenant;
+  }
+
+  async getTenants(): Promise<Tenant[]> {
+    return await db
+      .select()
+      .from(tenants)
+      .orderBy(desc(tenants.createdAt));
+  }
+
+  async updateTenant(id: string, updates: UpdateTenant): Promise<Tenant> {
+    const [tenant] = await db
+      .update(tenants)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tenants.id, id))
+      .returning();
+    return tenant;
+  }
+
+  async deleteTenant(id: string): Promise<void> {
+    // Custom domains are cascaded, but we need to handle links and users
+    // Links are not cascaded - they become orphaned (tenant = null)
+    await db
+      .update(links)
+      .set({ tenantId: null })
+      .where(eq(links.tenantId, id));
+
+    // Users are not cascaded - they become orphaned (tenant = null)
+    await db
+      .update(users)
+      .set({ tenantId: null })
+      .where(eq(users.tenantId, id));
+
+    // Delete the tenant (custom domains will cascade)
+    await db.delete(tenants).where(eq(tenants.id, id));
+  }
+
+  // =============================================
+  // CUSTOM DOMAIN OPERATIONS
+  // =============================================
+
+  async createCustomDomain(domainData: InsertCustomDomain): Promise<CustomDomain> {
+    const verificationToken = randomBytes(32).toString("hex");
+    const [domain] = await db
+      .insert(customDomains)
+      .values({
+        ...domainData,
+        domain: domainData.domain.toLowerCase(),
+        verificationToken,
+      })
+      .returning();
+    return domain;
+  }
+
+  async getCustomDomain(domain: string): Promise<CustomDomain | undefined> {
+    const [result] = await db
+      .select()
+      .from(customDomains)
+      .where(eq(customDomains.domain, domain.toLowerCase()));
+    return result;
+  }
+
+  async getCustomDomainsByTenant(tenantId: string): Promise<CustomDomain[]> {
+    return await db
+      .select()
+      .from(customDomains)
+      .where(eq(customDomains.tenantId, tenantId))
+      .orderBy(desc(customDomains.isPrimary), desc(customDomains.createdAt));
+  }
+
+  async verifyCustomDomain(id: string): Promise<CustomDomain> {
+    const [domain] = await db
+      .update(customDomains)
+      .set({
+        sslStatus: "active",
+        verifiedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(customDomains.id, id))
+      .returning();
+    return domain;
+  }
+
+  async deleteCustomDomain(id: string): Promise<void> {
+    await db.delete(customDomains).where(eq(customDomains.id, id));
+  }
+
+  // =============================================
+  // TENANT-SCOPED OPERATIONS
+  // =============================================
+
+  async getLinksByTenant(tenantId: string): Promise<Link[]> {
+    return await db
+      .select()
+      .from(links)
+      .where(eq(links.tenantId, tenantId))
+      .orderBy(desc(links.createdAt));
+  }
+
+  async getAnalyticsByTenant(tenantId: string): Promise<Analytics[]> {
+    // Get all links for the tenant, then get their analytics
+    const tenantLinks = await this.getLinksByTenant(tenantId);
+    const linkIds = tenantLinks.map((l) => l.id);
+
+    if (linkIds.length === 0) {
+      return [];
+    }
+
+    // Build OR condition for all link IDs
+    const conditions = linkIds.map((id) => eq(analytics.linkId, id));
+    const whereClause = conditions.length === 1 ? conditions[0] : or(...conditions);
+
+    return await db
+      .select()
+      .from(analytics)
+      .where(whereClause)
+      .orderBy(desc(analytics.clickedAt));
+  }
+
+  async cleanupTenantAnalytics(tenantId: string, retentionDays: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+    // Get all links for the tenant
+    const tenantLinks = await this.getLinksByTenant(tenantId);
+    const linkIds = tenantLinks.map((l) => l.id);
+
+    if (linkIds.length === 0) {
+      return 0;
+    }
+
+    let deletedCount = 0;
+    for (const linkId of linkIds) {
+      const result = await db
+        .delete(analytics)
+        .where(
+          and(
+            eq(analytics.linkId, linkId),
+            lt(analytics.clickedAt, cutoffDate)
+          )
+        )
+        .returning();
+      deletedCount += result.length;
+    }
+
+    return deletedCount;
+  }
+
+  async cleanupTenantAuditLogs(tenantId: string, retentionDays: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+    const result = await db
+      .delete(auditLogs)
+      .where(
+        and(
+          eq(auditLogs.tenantId, tenantId),
+          lt(auditLogs.createdAt, cutoffDate)
+        )
+      )
+      .returning();
+
+    return result.length;
+  }
+
+  // =============================================
+  // ENHANCED LINK CREATION WITH TENANT SUPPORT
+  // =============================================
+
+  async createLinkWithTenant(
+    linkData: InsertLink,
+    createdBy: string,
+    tenantId?: string
+  ): Promise<Link> {
+    const shortCode = linkData.customAlias || this.generateShortCode();
+    const [link] = await db
+      .insert(links)
+      .values({
+        ...linkData,
+        shortCode,
+        createdBy,
+        tenantId: tenantId || null,
+      })
+      .returning();
+    return link;
+  }
+
+  // =============================================
+  // ENHANCED ANALYTICS WITH PRIVACY SETTINGS
+  // =============================================
+
+  async trackClickWithPrivacy(
+    linkId: string,
+    rawData: {
+      country?: string;
+      region?: string;
+      language?: string;
+      deviceType?: string;
+      referrer?: string;
+      ip?: string;
+    },
+    privacySettings: PrivacySettings
+  ): Promise<Analytics> {
+    const preparedData = prepareAnalyticsData(rawData, privacySettings);
+
+    const [analytic] = await db
+      .insert(analytics)
+      .values({
+        linkId,
+        country: preparedData.country,
+        region: preparedData.region,
+        language: preparedData.language,
+        deviceType: preparedData.deviceType as any,
+        referrer: preparedData.referrer,
+        anonymizedIp: preparedData.anonymizedIp,
+      })
+      .returning();
+
+    return analytic;
   }
 }
 

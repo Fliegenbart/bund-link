@@ -25,6 +25,11 @@ export async function getAuthProvider(): Promise<AuthProvider> {
       const { LocalAuthProvider } = await import("./local");
       return new LocalAuthProvider();
 
+    case "dev":
+      // Development mode - auto-login, no password needed
+      const { DevAuthProvider } = await import("./dev");
+      return new DevAuthProvider();
+
     case "replit":
     default:
       // Return Replit auth as default (existing implementation)

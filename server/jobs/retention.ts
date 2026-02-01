@@ -1,25 +1,56 @@
 import { storage } from "../storage";
+import { DEFAULT_PRIVACY_SETTINGS } from "@shared/schema";
 
-// Retention periods in days
-const RETENTION_CONFIG = {
-  analytics: 90, // 90 days for analytics data
-  auditLogs: 365, // 1 year for audit logs
+// Default retention periods for platform-wide cleanup (when no tenant)
+const DEFAULT_RETENTION_CONFIG = {
+  analytics: DEFAULT_PRIVACY_SETTINGS.analyticsRetentionDays,
+  auditLogs: DEFAULT_PRIVACY_SETTINGS.auditLogRetentionDays,
 };
 
 /**
  * Cleanup old analytics data based on retention policy
- * Should be run daily via cron or on server startup
+ * Handles both platform-wide and per-tenant cleanup
  */
 export async function runRetentionCleanup(): Promise<void> {
   console.log("[Retention] Starting cleanup job...");
 
   try {
-    // Clean up old analytics
-    const deletedAnalytics = await storage.cleanupOldAnalytics(RETENTION_CONFIG.analytics);
-    console.log(`[Retention] Deleted ${deletedAnalytics} old analytics records`);
+    // 1. Clean up platform-wide data (links without tenant)
+    const deletedPlatformAnalytics = await storage.cleanupOldAnalytics(
+      DEFAULT_RETENTION_CONFIG.analytics
+    );
+    console.log(`[Retention] Deleted ${deletedPlatformAnalytics} platform analytics records`);
 
-    // TODO: Add audit log cleanup when needed
-    // const deletedAuditLogs = await storage.cleanupOldAuditLogs(RETENTION_CONFIG.auditLogs);
+    // 2. Clean up per-tenant data based on their privacy settings
+    const tenants = await storage.getTenants();
+
+    for (const tenant of tenants) {
+      if (!tenant.isActive) continue;
+
+      const settings = tenant.privacySettings || DEFAULT_PRIVACY_SETTINGS;
+
+      try {
+        // Clean up tenant analytics
+        const deletedAnalytics = await storage.cleanupTenantAnalytics(
+          tenant.id,
+          settings.analyticsRetentionDays
+        );
+
+        // Clean up tenant audit logs
+        const deletedAuditLogs = await storage.cleanupTenantAuditLogs(
+          tenant.id,
+          settings.auditLogRetentionDays
+        );
+
+        if (deletedAnalytics > 0 || deletedAuditLogs > 0) {
+          console.log(
+            `[Retention] Tenant "${tenant.slug}": Deleted ${deletedAnalytics} analytics, ${deletedAuditLogs} audit logs`
+          );
+        }
+      } catch (error) {
+        console.error(`[Retention] Failed to cleanup tenant "${tenant.slug}":`, error);
+      }
+    }
 
     console.log("[Retention] Cleanup job completed successfully");
   } catch (error) {

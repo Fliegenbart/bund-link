@@ -3,15 +3,19 @@ import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { getAuthProvider } from "./auth";
 import { requireRole, canAccessLink } from "./middleware/authorization";
 import { auditMiddleware } from "./middleware/audit";
+import { resolveTenant, getPrivacySettings, getDomainWhitelist, getWhitelistMode, initializeTenantCache } from "./middleware/tenant";
 import { registerGdprRoutes } from "./routes/gdpr";
 import { registerQrCodeRoutes } from "./routes/qrcode";
 import { registerAIRoutes } from "./routes/ai";
+import tenantRoutes from "./routes/tenants";
 import { initGeoIP, getCountryFromIP, getClientIP } from "./lib/geoip";
 import { initAI } from "./lib/ai";
-import { insertLinkSchema, updateLinkSchema, insertReportSchema, insertRoutingRuleSchema, bulkLinksSchema, type BulkLinkResult } from "@shared/schema";
+import { validateDestinationUrl, isExternalLink, isTrustedDomain } from "./lib/domain";
+import { getClientIp } from "./lib/privacy";
+import { insertLinkSchema, updateLinkSchema, insertReportSchema, insertRoutingRuleSchema, bulkLinksSchema, type BulkLinkResult, DEFAULT_TRUSTED_DOMAINS } from "@shared/schema";
 
 // Stricter rate limits for sensitive endpoints
 const authLimiter = rateLimit({
@@ -48,8 +52,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize AI (Ollama) - non-blocking, falls back gracefully
   await initAI();
 
-  // Auth middleware
-  await setupAuth(app);
+  // Initialize tenant domain cache
+  await initializeTenantCache();
+
+  // Auth middleware - uses AUTH_PROVIDER env to choose provider
+  const authProvider = await getAuthProvider();
+  await authProvider.setup(app);
+  const isAuthenticated = authProvider.isAuthenticated;
+
+  // Apply tenant resolution middleware to all routes
+  app.use(resolveTenant());
 
   // GDPR compliance routes
   registerGdprRoutes(app);
@@ -59,6 +71,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // AI-powered features routes
   registerAIRoutes(app);
+
+  // Tenant management routes
+  app.use("/api/tenants", isAuthenticated, tenantRoutes);
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
@@ -77,7 +92,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const validatedData = insertLinkSchema.parse(req.body);
-      const link = await storage.createLink(validatedData, userId);
+
+      // Validate destination URL against tenant whitelist
+      const whitelist = [...DEFAULT_TRUSTED_DOMAINS, ...getDomainWhitelist(req)];
+      const whitelistMode = getWhitelistMode(req);
+      const validation = validateDestinationUrl(validatedData.destinationUrl, {
+        whitelistMode,
+        whitelist,
+      });
+
+      if (!validation.allowed) {
+        return res.status(400).json({
+          message: validation.reason,
+          code: "WHITELIST_BLOCKED",
+        });
+      }
+
+      // Create link with tenant association
+      const tenantId = req.tenant?.id || (req.user as any).tenantId;
+      const link = await storage.createLinkWithTenant(validatedData, userId, tenantId);
       res.json(link);
     } catch (error: any) {
       console.error("Error creating link:", error);
@@ -89,16 +122,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const links = bulkLinksSchema.parse(req.body);
-      
+
+      // Get whitelist settings
+      const whitelist = [...DEFAULT_TRUSTED_DOMAINS, ...getDomainWhitelist(req)];
+      const whitelistMode = getWhitelistMode(req);
+      const tenantId = req.tenant?.id || (req.user as any).tenantId;
+
       const results: BulkLinkResult[] = [];
       for (let i = 0; i < links.length; i++) {
         const linkData = links[i];
         try {
+          // Validate against whitelist
+          const validation = validateDestinationUrl(linkData.destinationUrl, {
+            whitelistMode,
+            whitelist,
+          });
+
+          if (!validation.allowed) {
+            results.push({
+              row: i + 1,
+              success: false,
+              error: validation.reason,
+            });
+            continue;
+          }
+
           const validatedData = insertLinkSchema.parse({
             ...linkData,
             isActive: true,
           });
-          const link = await storage.createLink(validatedData, userId);
+          const link = await storage.createLinkWithTenant(validatedData, userId, tenantId);
           results.push({
             row: i + 1,
             success: true,
@@ -113,7 +166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
-      
+
       res.json(results);
     } catch (error: any) {
       console.error("Error in bulk creation:", error);
@@ -168,14 +221,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Determine appropriate destination URL based on routing rules
       const userAgent = req.headers["user-agent"] || "";
-      const deviceType = userAgent.includes("Mobile") ? "mobile" : 
+      const deviceType = userAgent.includes("Mobile") ? "mobile" :
                         userAgent.includes("Tablet") ? "tablet" : "desktop";
-      
+
       // Parse full language tag from Accept-Language (e.g., "de-DE" or "en-US")
       // Format: "de-DE,de;q=0.9,en;q=0.8" → extract "de-DE"
       const acceptLanguage = req.headers["accept-language"] || "de";
       const language = acceptLanguage.split(",")[0].split(";")[0].trim();
-      
+
       // Country detection: Use X-Country-Code header for testing, otherwise use GeoIP
       const testCountry = req.headers["x-country-code"] as string;
       const country = testCountry || getCountryFromIP(getClientIP(req));
@@ -186,7 +239,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         deviceType,
       });
 
-      res.json({ ...link, destinationUrl });
+      // DSGVO transparency: flag external links (outside trusted German/EU domains)
+      // Combine default trusted domains with tenant-specific whitelist
+      const whitelist = [...DEFAULT_TRUSTED_DOMAINS, ...getDomainWhitelist(req)];
+      const isExternal = isExternalLink(destinationUrl, whitelist);
+
+      res.json({ ...link, destinationUrl, isExternalLink: isExternal });
     } catch (error) {
       console.error("Error fetching link:", error);
       res.status(500).json({ message: "Failed to fetch link" });
@@ -198,26 +256,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate shortCode format
       const shortCode = shortCodeSchema.parse(req.params.shortCode);
       const link = await storage.getLinkByShortCode(shortCode);
-      
+
       if (!link) {
         return res.status(404).json({ message: "Link not found" });
       }
 
-      // Track analytics (fully anonymized, GDPR-compliant)
+      // Get privacy settings (from tenant if link has one, otherwise defaults)
+      const privacySettings = getPrivacySettings(req);
+
+      // Prepare raw analytics data
       const userAgent = req.headers["user-agent"] || "";
-      const deviceType = userAgent.includes("Mobile") ? "mobile" : 
+      const deviceType = userAgent.includes("Mobile") ? "mobile" :
                         userAgent.includes("Tablet") ? "tablet" : "desktop";
-      
-      await storage.trackClick({
-        linkId: link.id,
-        deviceType,
-        // Use GeoIP for country detection (GDPR-compliant: only country, no IP stored)
-        country: getCountryFromIP(getClientIP(req)),
-        region: null, // Would require GeoLite2-City database
-        language: req.headers["accept-language"]?.split(",")[0].slice(0, 2) || "de",
-        // Referrer intentionally omitted - contains potentially identifying information
-        referrer: null,
-      });
+
+      // Track analytics with privacy-aware data collection
+      await storage.trackClickWithPrivacy(
+        link.id,
+        {
+          country: getCountryFromIP(getClientIP(req)),
+          region: undefined, // Would require GeoLite2-City database
+          language: req.headers["accept-language"]?.split(",")[0].slice(0, 10) || "de",
+          deviceType,
+          referrer: req.headers.referer || undefined,
+          ip: getClientIp(req),
+        },
+        privacySettings
+      );
 
       await storage.incrementClickCount(link.id);
 

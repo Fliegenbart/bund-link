@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute } from "wouter";
-import { Shield, ExternalLink, AlertTriangle, Clock, ChevronRight } from "lucide-react";
+import { Shield, ExternalLink, AlertTriangle, Clock, ChevronRight, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { VerificationBadge } from "@/components/VerificationBadge";
@@ -9,6 +9,11 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Link } from "@shared/schema";
+
+// Extended type for preview response with external link detection
+interface PreviewLink extends Link {
+  isExternalLink?: boolean;
+}
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { apiRequest } from "@/lib/queryClient";
@@ -17,13 +22,20 @@ import { useToast } from "@/hooks/use-toast";
 export default function Preview() {
   const [, params] = useRoute("/:shortCode");
   const shortCode = params?.shortCode || "";
-  const [countdown, setCountdown] = useState(5);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const { toast } = useToast();
 
-  const { data: link, isLoading } = useQuery<Link>({
+  const { data: link, isLoading } = useQuery<PreviewLink>({
     queryKey: ["/api/links/preview", shortCode],
     enabled: !!shortCode,
   });
+
+  // Set initial countdown based on external link status (10s for external, 5s for trusted)
+  useEffect(() => {
+    if (link && countdown === null) {
+      setCountdown(link.isExternalLink ? 10 : 5);
+    }
+  }, [link, countdown]);
 
   const trackMutation = useMutation({
     mutationFn: async () => {
@@ -37,8 +49,11 @@ export default function Preview() {
       window.location.href = link.destinationUrl;
     }
 
+    // Only start countdown when it's been initialized
+    if (countdown === null) return;
+
     const timer = setInterval(() => {
-      setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      setCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
     }, 1000);
 
     return () => clearInterval(timer);
@@ -148,6 +163,17 @@ export default function Preview() {
             </Alert>
           )}
 
+          {link.isExternalLink && !isExpired && (
+            <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+              <Globe className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+              <AlertDescription className="text-amber-800 dark:text-amber-200">
+                <strong>Externe Webseite:</strong> Dieser Link führt zu einer Seite außerhalb
+                vertrauenswürdiger deutscher/europäischer Domains. Bitte prüfen Sie die Ziel-URL
+                sorgfältig, bevor Sie fortfahren.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Card className="p-6">
             <div className="space-y-4">
               <div>
@@ -204,12 +230,19 @@ export default function Preview() {
             </div>
           </Card>
 
-          {!isExpired && (
-            <div className="flex items-center justify-center gap-3 rounded-md border bg-muted/30 p-4">
-              <Clock className="h-5 w-5 text-muted-foreground" />
+          {!isExpired && countdown !== null && (
+            <div className={`flex items-center justify-center gap-3 rounded-md border p-4 ${
+              link.isExternalLink
+                ? "border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/10"
+                : "bg-muted/30"
+            }`}>
+              <Clock className={`h-5 w-5 ${
+                link.isExternalLink ? "text-amber-600" : "text-muted-foreground"
+              }`} />
               <span className="text-sm">
                 Automatische Weiterleitung in <span className="font-bold">{countdown}</span>{" "}
                 Sekunden
+                {link.isExternalLink && " (verlängert für externe Seite)"}
               </span>
             </div>
           )}
